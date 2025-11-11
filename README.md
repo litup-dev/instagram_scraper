@@ -7,9 +7,9 @@
 ## 설치
 
 ### 의존성 설치:
-\`\`\`bash
+```bash
 pip install -r requirements.txt
-\`\`\`
+```
 
 ## 사용법
 
@@ -17,7 +17,7 @@ pip install -r requirements.txt
 
 \`config/settings.py\` 파일의 \`CHANNELS\` 리스트에 추가:
 
-\`\`\`python
+```python
 CHANNELS = [
     {'username': 'ovantgarde', 'club_id': 1},
     {'username': 'clubbbang', 'club_id': 2},
@@ -25,11 +25,12 @@ CHANNELS = [
     {'username': 'unplugged_stage', 'club_id': 4},
     {'username': 'new_channel', 'club_id': 5},  # 새 채널 추가
 ]
-\`\`\`
+```
+
 
 ## 구조
 
-\`\`\`
+```python
 instagram-concert-scraper/
 ├── config/
 │   └── settings.py              # 설정 파일
@@ -52,7 +53,7 @@ instagram-concert-scraper/
 ├── main.py                      # 메인 실행 파일
 ├── requirements.txt
 └── README.md
-\`\`\`
+```
 
 ## 주의사항
 
