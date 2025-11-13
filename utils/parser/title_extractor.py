@@ -56,7 +56,9 @@ class TitleExtractor:
         
         # 이모지와 특수문자 제거
         clean = re.sub(r'[⚠️💫🚨🎸\[\]<>"""\(\).]', '', first_line).strip()
-        
+        # 해시태그로만 이루어진 경우 제외
+        if clean.startswith('#'):
+            return None
         # 유효성 검사
         if (2 < len(clean) < 50 and 
             not clean.isdigit() and 
