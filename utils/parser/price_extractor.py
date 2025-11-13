@@ -34,7 +34,10 @@ class PriceExtractor:
         
         # 패턴 2: "3만원"
         prices.extend(self._extract_man_won(text))
-        
+                
+        # ⚠️ 추가: 패턴 3: 이모지 뒤 가격 (🎫 25,000 KRW)
+        prices.extend(self._extract_emoji_price(text))
+
         if prices:
             result = min(prices)
             return result
@@ -69,5 +72,22 @@ class PriceExtractor:
             price = int(match.group(1)) * 10000
             if self.min_price <= price <= self.max_price:
                 prices.append(price)
+        
+        return prices
+
+    
+    def _extract_emoji_price(self, text: str) -> list:
+        """⚠️ 새로 추가: 이모지 뒤 가격 (🎫 25,000 KRW)"""
+        prices = []
+        
+        # 이모지 뒤에 숫자가 오는 패턴
+        pattern = r'[🎫💰]\s*(\d{1,3}(?:,\d{3})+)\s*(?:원|₩|won|KRW)?'
+        
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            price_str = match.group(1).replace(',', '')
+            price = int(price_str)
+            if self.min_price <= price <= self.max_price:
+                prices.append(price)
+                logger.debug(f"이모지 가격: {price}원")
         
         return prices
