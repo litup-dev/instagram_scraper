@@ -5,26 +5,18 @@ import re
 from typing import List, Dict
 from typing import Optional
 from utils.logger import setup_logger
+from config.settings import CHANNELS
 
 logger = setup_logger('artist_extractor')
+
 
 class ArtistExtractor:
     """아티스트 정보 추출"""
     
-    def __init__(self):
-        self.max_artists = 15
-        self.exclude_words = [
-            '언플러그드', '정기공연', 'with', '자세한', '예매', '정보',
-            'ticket', 'link', 'profile', '티켓', '프로필', '링크'
-        ]
-        self.exclude_hashtags = [
-            'liveishere', 'liveclubday', 'lcd', '라이브클럽데이', '라클데',
-            '카카오창작재단', 'concertphotography', 'livemusic', 'busan',
-            '공연사진', '라이브음악', '부산', '홍대클럽', '클럽ff', '라이브클럽',
-            '락클럽', '홍대인디밴드', 'rockband', '인디밴드', 'rockdj',
-            '밴드공연', '인디공연', '홍대인디', '홍대공연', '홍대맛집',
-            '홍대데이트코스', '음악맛집', '클럽공연', '케이락', '엪엪'
-        ]
+    # 아티스트에서 제외할 키워드 목록
+    EXCLUDED_NAME_KEYWORDS = ['문의']
+    # 아티스트에서 제외할 키워드 목록
+    EXCLUDED_AT_KEYWORDS = ['FF']
     
     def extract(self, text: str) -> List[Dict[str, str]]:
         """
@@ -40,120 +32,111 @@ class ArtistExtractor:
             return []
         
         artists = []
-        
-        # 1. 라인업 섹션 찾기
-        search_area = self._find_lineup_section(text)
-        
-        # 2. 이모지 패턴 (🌀, 🎸 등)
-        artists.extend(self._extract_emoji_pattern(search_area or text))
-        
-        # 3. 시간 + 아티스트 패턴 ("7:00pm #밴드명 @handle")
-        if not artists:
-            artists.extend(self._extract_time_artist_pattern(search_area or text))
-        
-        # 4. "> Artist / 한글 @handle" 형식
-        if not artists:
-            artists.extend(self._extract_arrow_pattern(search_area or text))
-        
-        # 5. 기본 패턴 ("아티스트명 @handle")
-        if not artists:
-            artists.extend(self._extract_basic_pattern(search_area or text))
-        
+        artists.extend(self._extract_basic_pattern(text))
+
         # 중복 제거
-        unique = self._remove_duplicates(artists)
-        
-        logger.info(f"✅ 아티스트 추출: {len(unique)}명")
-        return unique[:self.max_artists]
-    
-    def _find_lineup_section(self, text: str) -> Optional[str]:
-        """라인업 섹션 찾기"""
-        patterns = [
-            r'(?:Live\s*Bands|Line\s*up|라인업|DJs)\s*[:：\n]+(.*?)(?=\n\n|<|Cover|ADV|DOOR|티켓|입장료|예매|^\.|^#)',
-            r'with[\s\n]+(.*?)(?=\n\n\[|일시|Date|티켓)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, text, re.DOTALL | re.IGNORECASE | re.MULTILINE)
-            if match:
-                return match.group(1)
-        
-        return None
-    
-    def _extract_emoji_pattern(self, text: str) -> List[Dict[str, str]]:
-        """이모지 패턴 (🌀 ARTIST @handle)"""
-        artists = []
-        pattern = r'[🌀🎸]\s*([^\n@]+?)\s*(@[\w.]+)'
-        
-        for match in re.finditer(pattern, text):
-            name = match.group(1).strip()
-            handle = match.group(2).strip()
-            if 1 < len(name) < 50:
-                artists.append({'name': name, 'insta': handle})
-        
-        return artists
-    
-    def _extract_time_artist_pattern(self, text: str) -> List[Dict[str, str]]:
-        """시간 + 아티스트 패턴 (7:00pm #밴드명 @handle)"""
-        artists = []
-        pattern = r'\d{1,2}:\d{2}\s*(?:pm|am)?\s*#?([가-힣a-zA-Z0-9\s]+?)\s*(@[\w.]+)'
-        
-        for match in re.finditer(pattern, text, re.IGNORECASE):
-            name = match.group(1).strip()
-            handle = match.group(2).strip()
-            if name.lower() not in ['from', 'japan', 'taiwan'] and len(name) > 1:
-                artists.append({'name': name, 'insta': handle})
-        
-        return artists
-    
-    def _extract_arrow_pattern(self, text: str) -> List[Dict[str, str]]:
-        """"> Artist / 한글 @handle" 형식"""
-        artists = []
-        pattern = r'>\s*([^/\n@]+?)\s*/\s*([^@\n]+?)\s*(@[\w.]+)'
-        
-        for match in re.finditer(pattern, text):
-            name1, name2, handle = match.groups()
-            
-            # 한글명 우선
-            if re.search(r'[가-힣]', name2):
-                artist_name = name2.strip()
-            else:
-                artist_name = name1.strip()
-            
-            if 1 < len(artist_name) < 50:
-                artists.append({'name': artist_name, 'insta': handle})
-        
-        return artists
+        return self._remove_duplicates(artists)
     
     def _extract_basic_pattern(self, text: str) -> List[Dict[str, str]]:
         """기본 패턴 (아티스트명 @handle)"""
         artists = []
-        pattern = r'^[\s>🌀✨—]*([가-힣a-zA-Z0-9\s&\(\)\'\.]+?)\s+(@[\w.]+)'
+        pattern = r'^[\s>🌀✨—]*(.+?)\s+(@[\w\.-]+)'
         
         for line in text.split('\n'):
             line = line.strip()
+
             if '@' not in line or len(line) < 3:
-                continue
-            
-            # 날짜 패턴 제외
-            if re.match(r'^\d{4}\.\s*\d{1,2}', line):
                 continue
             
             match = re.match(pattern, line)
             if match:
-                name = match.group(1).strip()
                 handle = match.group(2).strip()
+                name = match.group(1).strip()
                 
-                # 필터링
-                if any(word in name.lower() for word in self.exclude_words):
-                    continue
+                # 규칙 1: #이 들어간 경우, # 다음의 단어만 name으로 지정
+                if '#' in name:
+                    hashtag_match = re.search(r'#(\S+)', name)
+                    if hashtag_match:
+                        name = hashtag_match.group(1)
+                        logger.info(f"🏷️ 해시태그에서 추출: {name}")
                 
-                if len(name) < 2:
+                if len(name) < 1:
                     name = handle.replace('@', '').replace('_', ' ')
                 
-                if 1 < len(name) < 50:
-                    artists.append({'name': name, 'insta': handle})
+                # 규칙 2: 특정 키워드가 포함된 경우 제외 (name)
+                if self._contains_excluded_keywords(name, self.EXCLUDED_NAME_KEYWORDS):
+                    logger.warning(f"⚠️ 제외 키워드 포함 [name] (제외): {name}")
+                    continue
+                
+                # 규칙 2-2: 특정 키워드가 포함된 경우 제외 (@handle)
+                if self._contains_excluded_keywords(handle, self.EXCLUDED_AT_KEYWORDS):
+                    logger.warning(f"⚠️ 제외 키워드 포함 [@handle] (제외): {handle}")
+                    continue
+                
+                # 규칙 3: 설명 텍스트 제외 (너무 긴 텍스트나 특정 패턴)
+                if self._is_description_text(name):
+                    logger.warning(f"⚠️ 설명 텍스트로 판단 (제외): {name[:50]}...")
+                    continue
+                
+                # 규칙 4: name에 한글 또는 영어가 최소 1글자 이상 있어야 함
+                if not self._has_valid_characters(name):
+                    logger.warning(f"⚠️ 유효한 문자 없음 (제외): {name}")
+                    continue
+
+                # 채널명이 포함되면 제외
+                channel_usernames = {c['username'].lower() for c in CHANNELS}
+                if any(channel in handle.lower() for channel in channel_usernames):
+                    logger.info(f"🚫 채널명 제외: {handle}")
+                    continue
+
+                artists.append({'name': name, 'insta': handle})
         
         return artists
+
+    def _has_valid_characters(self, name: str) -> bool:
+        """
+        규칙 4: name에 한글 또는 영어가 최소 1글자 이상 있는지 확인
+        """
+        # 한글: ㄱ-ㅎ, ㅏ-ㅣ, 가-힣
+        # 영어: a-zA-Z
+        return bool(re.search(r'[가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z]', name))
+
+    def _contains_excluded_keywords(self, text: str, keywords: List[str]) -> bool:
+        """
+        규칙 2: 제외할 키워드가 포함되어 있는지 확인
+        
+        Args:
+            text: 검사할 텍스트 (name 또는 @handle)
+            keywords: 제외할 키워드 목록
+        """
+        return any(keyword in text for keyword in keywords)
+
+    def _is_description_text(self, name: str) -> bool:
+        """
+        규칙 3: 설명 텍스트인지 판단
+        - 너무 긴 텍스트 (50자 이상)
+        - 쉼표나 마침표가 2개 이상 포함
+        - '으로', '하는' 등 설명문에 자주 나오는 조사/동사 포함
+        """
+        # 길이 체크
+        if len(name) > 50:
+            return True
+        
+        # 문장 부호 체크
+        punctuation_count = name.count(',') + name.count('.') + name.count('、')
+        if punctuation_count >= 2:
+            return True
+        
+        # 조사 키워드
+        description_keywords = [
+            '하는', '으로', '에서', '통해', '함께', '대한'
+        ]
+        
+        if any(keyword in name for keyword in description_keywords):
+            return True
+        
+        return False
+    
     
     def _remove_duplicates(self, artists: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """중복 제거 (인스타 핸들 기준)"""
