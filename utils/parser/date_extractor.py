@@ -99,15 +99,14 @@ class DateExtractor:
             (r'(\d{4})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})', 'ymd'),
             # YY.MM.DD (25.11.29)
             (r'(\d{2})[.\-/]\s*(\d{1,2})[.\-/]\s*(\d{1,2})', 'short_ymd'),
-            # MM/DD or M/D
-            (r'(\d{1,2})[./-](\d{1,2})(?!\d)', 'md'),
-            # DD.MM.YYYY (28.NOV.2025)
-            (r'(\d{1,2})\s*\.\s*([A-Z]{3})\s*\.\s*(\d{4})', 'dmy_month'),
             # YYYY년 MM월 DD일
             (r'(\d{4})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일?', 'ymd_korean'),
             # MM월 DD일 (연도 없음 - 현재 연도 사용)
-            (r'(\d{1,2})\s*월\s*(\d{1,2})\s*일?', 'md_korean'),
-            
+            (r'(\d{1,2})\s*월\s*(\d{1,2})\s*일', 'md_korean'),
+            # DD.MM.YYYY (28.NOV.2025)
+            (r'(\d{1,2})\s*\.\s*([A-Z]{3})\s*\.\s*(\d{4})', 'dmy_month'),
+            # MM/DD or M/D
+            (r'(\d{1,2})[/](\d{1,2})(?!\d)', 'md'),
         ]
         
         month_map = {
@@ -118,7 +117,7 @@ class DateExtractor:
         for pattern, pattern_type in date_patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                logger.info(f"📅 [정규식] 날짜 매칭: {match.group()}")
+                logger.info(f"📅 [정규식] 날짜 매칭: {match.group()} {pattern}")
                 
                 try:
                     if pattern_type == 'ymd':
