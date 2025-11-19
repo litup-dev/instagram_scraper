@@ -24,7 +24,7 @@ NOT_PERFORMANCE_KEYWORDS = [
 ]
 
 # 가져올 게시물 수
-AMOUNT = 10       
+AMOUNT = 5
 
 # 게시물 수집 시, 최근 CUTOFF_DAYS 일 이내 게시물만 수집
 CUTOFF_DAYS = 0
@@ -33,7 +33,7 @@ class InstagramScraper:
     def __init__(self):
         self.client = Client()
         self.client.request_timeout = 10 #10초 안에 응답이 없으면 TimeoutError로 실패 처리
-        self.client.delay_range = [1, 2] # 봇 차단 방지용 지연요청 → API 요청 사이의 대기 시간 1초~2초 랜덤
+        self.client.delay_range = [2, 5] # 봇 차단 방지용 지연요청 → API 요청 사이의 대기 시간 2초~5초 랜덤
         self.parser = Parser()
         self.session_file = 'instagram_session.json'
         self._login()
@@ -50,7 +50,7 @@ class InstagramScraper:
                 try:
                     self.client.load_settings(self.session_file)
                     # 세션 로드 후 로그인 (중요!)
-                    self.client.login(INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD)
+                    # self.client.login(INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD)
                     
                     # 세션 유효성 검증
                     self.client.account_info()
@@ -148,6 +148,7 @@ class InstagramScraper:
                                 'price': post_data.get('price', 'N/A'),
                                 'artists_count': len(post_data.get('artists', [])),
                                 'artists': post_data.get('artists', []),
+                                '원본 데이터': media.caption_text or ''
                             }, ensure_ascii=False, indent=2))
                             logger.info("=" * 80 + "\n")
                     else: 
@@ -160,7 +161,7 @@ class InstagramScraper:
                         logger.info("=" * 80 + "\n")
                         
                     # Rate limit 방지 - 매 요청마다 대기
-                    time.sleep(2)
+                    time.sleep(5)
                 except Exception as e:
                     logger.error(f"❌ 게시물 {i} 처리 오류: {e}")
                     continue
@@ -205,24 +206,13 @@ class InstagramScraper:
         #     return False
 
         """공연 관련 게시물인지 판단"""
-
         caption = media.caption_text
         if not caption:
             return False
         
         caption_lower = caption.lower()
         
-        # # 1. 공연 후기/사진 제외
-        # review_patterns = [
-        #     r'\d{2}\.\d{2}\.\d{2}\s+@\w+\s+at\s+@\w+',  # "10.31.25 @artist at @venue"
-        #     r'#concertphotography',
-        #     r'#공연사진',
-        # ]
-        
-        # if any(re.search(p, caption, re.IGNORECASE) for p in review_patterns):
-        #     return False
-        
-        # 2. 공연 키워드 체크
+        # 키워드 체크
         if any(k in caption_lower for k in PERFORMANCE_KEYWORDS):
             return True
 
