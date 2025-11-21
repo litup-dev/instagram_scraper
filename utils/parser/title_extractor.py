@@ -41,12 +41,6 @@ class TitleExtractor:
             logger.info(f"✅ 제목 추출 (괄호): {title}")
             return title
         
-        # 패턴 3: 해시태그
-        title = self._extract_from_hashtag(text)
-        if title:
-            logger.info(f"✅ 제목 추출 (해시태그): {title}")
-            return title
-        
         logger.warning("⚠️ 제목 추출 실패")
         return None
     
@@ -76,11 +70,3 @@ class TitleExtractor:
                 return title
         return None
     
-    def _extract_from_hashtag(self, text: str) -> Optional[str]:
-        """해시태그에서 제목 추출"""
-        match = re.search(r'#([가-힣a-zA-Z0-9]+)', text)
-        if match:
-            tag = match.group(1)
-            if tag.lower() not in self.exclude_tags:
-                return tag
-        return None
