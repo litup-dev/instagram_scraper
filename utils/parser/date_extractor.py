@@ -10,7 +10,7 @@ logger = setup_logger('date_extractor')
 
 class DateExtractor:
     """공연 날짜 추출 - 날짜와 시간을 분리하여 파싱"""
-    def __init__(self, default_time: str = "19:00"):
+    def __init__(self, default_time: str = "00:00"):
         """
         Args:
             default_time: 시간 정보가 없을 때 사용할 기본값 (HH:MM 형식)
