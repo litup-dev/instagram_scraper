@@ -78,9 +78,9 @@ DOOR 25,000원''',
         
         # 무료 공연
         {
-            'name': '무료 (추출 실패 예상)',
+            'name': '무료 (0원)',
             'text': '입장료: 무료',
-            'expected': {'booking_price': None, 'onsite_price': None}
+            'expected': {'booking_price': 0, 'onsite_price': 0}
         },
         
         # 가격 없음 (날짜만 있는 경우)

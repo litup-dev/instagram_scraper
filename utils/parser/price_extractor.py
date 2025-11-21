@@ -35,6 +35,10 @@ class PriceExtractor:
         if not text:
             return {'booking_price': None, 'onsite_price': None}
 
+        # 0) 무료
+        if re.search(r'무료|free', text, re.IGNORECASE):
+            return {'booking_price': 0, 'onsite_price': 0}
+        
         original_text = text
         lower = text.lower()
 
