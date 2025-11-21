@@ -4,6 +4,55 @@
 import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.parser.price_extractor import PriceExtractor
+from scraper.instagram_scraper import InstagramScraper
+from utils.logger import setup_logger
+import json
+
+logger = setup_logger('test_price_extractor')
+
+def test_post_url(post_url: str):
+    """게시물 URL로 가격 정보 테스트"""
+    try:
+        logger.info(f"🔍 게시물 테스트: {post_url}")
+        
+        scraper = InstagramScraper()
+        extractor = PriceExtractor()
+        
+        # URL에서 media_pk 추출
+        media_pk = scraper.client.media_pk_from_url(post_url)
+        media = scraper.client.media_info(media_pk)
+        
+        caption = media.caption_text or ''
+        
+        print("\n" + "="*80)
+        print("📋 게시물 정보")
+        print("="*80)
+        print(f"🔗 게시물 URL: {post_url}")
+        print(f"👤 사용자: @{media.user.username}")
+        print(f"\n📝 Caption :\n{caption}...")
+        
+        # 가격 추출
+        result = extractor.extract(caption)
+        
+        print("\n" + "="*80)
+        print("💰 가격 추출 결과")
+        print("="*80)
+        print(json.dumps({
+            'booking_price': result.get('booking_price'),
+            'onsite_price': result.get('onsite_price'),
+            'booking_price_formatted': f"{result.get('booking_price'):,}원" if result.get('booking_price') else "없음",
+            'onsite_price_formatted': f"{result.get('onsite_price'):,}원" if result.get('onsite_price') else "없음"
+        }, ensure_ascii=False, indent=2))
+        print("="*80)
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ 실패: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 
 # ========== 테스트 코드 ==========
 
@@ -131,4 +180,26 @@ DOOR 25,000원''',
 
 
 if __name__ == "__main__":
-    test_price_extractor()
+    print("\n" + "=" * 80)
+    print("가격 추출기 테스트 선택".center(80))
+    print("=" * 80)
+    
+    print("\n1. 미리 정의된 테스트 케이스 실행")
+    print("2. 게시물 URL로 직접 테스트")
+    
+    choice = input("\n선택 (1-2): ").strip()
+    
+    if choice == "1":
+        test_price_extractor()
+    elif choice == "2":
+        url = input("\n게시물 URL 입력: ").strip()
+        if url:
+            test_post_url(url)
+        else:
+            print("❌ URL을 입력하세요")
+    else:
+        print("❌ 잘못된 선택")
+    
+    print("\n" + "=" * 80)
+    print("테스트 완료")
+    print("=" * 80)
