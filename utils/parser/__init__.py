@@ -5,6 +5,7 @@ from .date_extractor import DateExtractor
 from .price_extractor import PriceExtractor
 from .title_extractor import TitleExtractor
 from .artist_extractor import ArtistExtractor
+from .url_extractor import UrlExtractor
 from typing import Dict
 from utils.logger import setup_logger
 
@@ -22,8 +23,9 @@ class Parser:
         self.price_extractor = PriceExtractor()
         self.title_extractor = TitleExtractor()
         self.artist_extractor = ArtistExtractor()
+        self.url_extractor = UrlExtractor()
     
-    def parse_performance_info(self, caption: str, post_url: str = '') -> Dict:
+    def parse_performance_info(self, caption: str, post_url: str = '', profile_url: str = None)  -> Dict:
         """
         캡션에서 공연 정보 추출
         
@@ -44,6 +46,7 @@ class Parser:
             'booking_price': self.price_extractor.extract(caption).get('booking_price'),
             'onsite_price': self.price_extractor.extract(caption).get('onsite_price'),
             'description': caption,
+            'booking_url': self.url_extractor.extract(caption, profile_url),
             'sns_links': [{'sns': 'insta', 'link': post_url}] if post_url else []
         }
 
@@ -51,14 +54,17 @@ class Parser:
             not result['artists'] and
             not result['perform_date'] and
             not result['booking_price'] and
-            not result['onsite_price']):
+            not result['onsite_price'] and
+            not result['booking_url']):
             raise PerformanceParseError("공연 정보 없음 (제목/아티스트/날짜/가격 데이터 추출 불가)")
         
         
         logger.info(f"파싱 완료: 제목={result['title']}, "
                    f"아티스트={len(result['artists'])}명, "
                    f"날짜={result['perform_date']}, "
-                   f"가격(예매/현매)={result['booking_price']} / {result['onsite_price']}")
+                   f"가격(예매/현매)={result['booking_price']} / {result['onsite_price']}, "
+                    f"예매URL={result['booking_url']}")
+
         
         return result
     

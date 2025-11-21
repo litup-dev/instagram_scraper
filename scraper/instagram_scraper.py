@@ -98,6 +98,20 @@ class InstagramScraper:
                 logger.info("👤 채널 사용자 정보 조회 중...")
                 user_info = self.client.user_info_by_username_v1(username)
                 user_id = user_info.pk
+                    
+                # 프로필 URL 추출 (linktr.ee 등)
+                profile_external_url = getattr(user_info, 'external_url', None)
+                bio = getattr(user_info, 'biography', '')
+                
+                # 바이오에서 URL 추출 시도
+                profile_url = profile_external_url
+                if not profile_url and bio:
+                    # Parser의 url_extractor 사용
+                    profile_url = self.parser.url_extractor.extract_profile_url_from_bio(bio)
+                
+                if profile_url:
+                    logger.info(f"🔗 프로필 URL: {profile_url}")
+                
             except UserNotFound:
                 logger.error(f"❌ {username}: 존재하지 않는 사용자")
                 return []
@@ -134,7 +148,7 @@ class InstagramScraper:
                     # 공연 관련 게시물인지 확인
                     if self._is_performance_post(media):
                         
-                        post_data = self._extract_post_data(media)
+                        post_data = self._extract_post_data(media, profile_url)
                         if post_data:
                             posts.append(post_data)
                             logger.info(f"✅ [{i}/{len(medias)}] 공연: {post_data.get('title', '')}")
@@ -149,6 +163,7 @@ class InstagramScraper:
                                 'booking_price': post_data.get('booking_price', 'N/A'),
                                 'artists_count': len(post_data.get('artists', [])),
                                 'artists': post_data.get('artists', []),
+                                'booking_url': post_data.get('booking_url', 'N/A'),
                                 '원본 데이터': media.caption_text or ''
                             }, ensure_ascii=False, indent=2))
                             logger.info("=" * 80 + "\n")
@@ -223,7 +238,7 @@ class InstagramScraper:
         return True
 
 
-    def _extract_post_data(self, media) -> Dict:
+    def _extract_post_data(self, media, profile_url) -> Dict:
         """게시물에서 데이터 추출"""
         try:
             
@@ -238,7 +253,7 @@ class InstagramScraper:
             
             # 파싱 (post_url 전달)
             try:
-                performance_info = self.parser.parse_performance_info(caption, post_url)
+                performance_info = self.parser.parse_performance_info(caption, post_url, profile_url)
             except PerformanceParseError as e:
                 logger.warning(f"⚠️ [code:{media.code}] 공연 게시물 아님 \n 이유 : {e}")
                 logger.info(json.dumps({

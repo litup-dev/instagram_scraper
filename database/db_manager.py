@@ -122,7 +122,7 @@ class DatabaseManager:
                 False,  # is_cancelled
                 post_data.get('title', ''),
                 post_data.get('caption', ''),
-                None  # booking_url (추후 추가)
+                post_data.get('booking_url', ''),
             ))
 
             # 삽입된 ID 가져오기
