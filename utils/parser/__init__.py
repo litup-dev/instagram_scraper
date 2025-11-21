@@ -41,7 +41,8 @@ class Parser:
             'title': self.title_extractor.extract(caption),
             'artists': self.artist_extractor.extract(caption),
             'perform_date': self.date_extractor.extract(caption),
-            'price': self.price_extractor.extract(caption),
+            'booking_price': self.price_extractor.extract(caption).get('booking_price'),
+            'onsite_price': self.price_extractor.extract(caption).get('onsite_price'),
             'description': caption,
             'sns_links': [{'sns': 'insta', 'link': post_url}] if post_url else []
         }
@@ -49,14 +50,15 @@ class Parser:
         if (not result['title'] and
             not result['artists'] and
             not result['perform_date'] and
-            not result['price']):
+            not result['booking_price'] and
+            not result['onsite_price']):
             raise PerformanceParseError("공연 정보 없음 (제목/아티스트/날짜/가격 데이터 추출 불가)")
         
         
         logger.info(f"파싱 완료: 제목={result['title']}, "
                    f"아티스트={len(result['artists'])}명, "
                    f"날짜={result['perform_date']}, "
-                   f"가격={result['price']}")
+                   f"가격(예매/현매)={result['booking_price']} / {result['onsite_price']}")
         
         return result
     

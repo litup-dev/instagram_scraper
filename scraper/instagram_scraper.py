@@ -137,7 +137,7 @@ class InstagramScraper:
                         post_data = self._extract_post_data(media)
                         if post_data:
                             posts.append(post_data)
-                            logger.info(f"✅ [{i}/{len(medias)}] 공연: {post_data.get('title', '')[:30]}")
+                            logger.info(f"✅ [{i}/{len(medias)}] 공연: {post_data.get('title', '')}")
                             
                             # 파싱 후
                             logger.info("\n" + "✨ 파싱 후 결과".center(80, "="))
@@ -145,7 +145,8 @@ class InstagramScraper:
                                 'post_url': post_data.get('post_url'),
                                 'title': post_data.get('title', 'N/A'),
                                 'perform_date': post_data.get('perform_date', 'N/A'),
-                                'price': post_data.get('price', 'N/A'),
+                                'onsite_price': post_data.get('onsite_price', 'N/A'),
+                                'booking_price': post_data.get('booking_price', 'N/A'),
                                 'artists_count': len(post_data.get('artists', [])),
                                 'artists': post_data.get('artists', []),
                                 '원본 데이터': media.caption_text or ''

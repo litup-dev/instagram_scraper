@@ -76,14 +76,21 @@ class DatabaseManager:
                     perform_date = dateparser.parse(post_data['perform_date'])
                 except ValueError:
                     logger.warning(f"⚠️ 날짜 형식 오류: {post_data.get('perform_date')}")
-            # price 데이터 처리 (정수형으로 변환)
+            
+            # price
+            booking_price = None
             onsite_price = None
-            if post_data.get('price'):
+            if post_data.get("booking_price") is not None:
                 try:
-                    onsite_price = int(post_data.get('price'))
-                except (ValueError, TypeError):
-                    logger.warning(f"⚠️ 가격 형식 오류: {post_data.get('price')}")
-
+                    booking_price = int(post_data["booking_price"])
+                except Exception:
+                    logger.warning(f"⚠️ booking_price 형식 오류: {post_data.get('booking_price')}")
+            if post_data.get("onsite_price") is not None:
+                try:
+                    onsite_price = int(post_data["onsite_price"])
+                except Exception:
+                    logger.warning(f"⚠️ onsite_price 형식 오류: {post_data.get('onsite_price')}")
+            
             # INSERT 쿼리
             insert_query = """
                 INSERT INTO perform_tb (
@@ -111,7 +118,7 @@ class DatabaseManager:
                 sns_links_json,
                 onsite_price,
                 perform_date,
-                None,  # booking_price (추후 추가)
+                booking_price,
                 False,  # is_cancelled
                 post_data.get('title', ''),
                 post_data.get('caption', ''),
@@ -123,7 +130,7 @@ class DatabaseManager:
             conn.commit()
 
             logger.info(f"✅ 공연 정보 저장 완료 (ID: {inserted_id})")
-            logger.info(f"   제목: {post_data.get('title', '')[:30]}")
+            logger.info(f"   제목: {post_data.get('title', '')}")
             logger.info(f"   클럽: {post_data.get('club_id')}")
             
             return inserted_id
