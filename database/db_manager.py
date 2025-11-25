@@ -15,19 +15,55 @@ class DatabaseManager:
     def __init__(self):
         """데이터베이스 연결 풀 초기화"""
         try:
+            # 연결 풀 설정 개선
             self.connection_pool = psycopg2.pool.SimpleConnectionPool(
                 minconn=1,
                 maxconn=10,
                 host=DB_CONFIG['host'],
-                port=DB_CONFIG['port'],
+                port=int(DB_CONFIG['port']),  # 포트를 정수로 변환
                 database=DB_CONFIG['database'],
                 user=DB_CONFIG['user'],
-                password=DB_CONFIG['password']
+                password=DB_CONFIG['password'],
+                connect_timeout=10,  # 연결 타임아웃 10초
+                keepalives=1,  # TCP keepalive 활성화
+                keepalives_idle=30,  # 30초마다 keepalive 패킷 전송
+                keepalives_interval=10,  # keepalive 재시도 간격
+                keepalives_count=5  # keepalive 재시도 횟수
             )
-            logger.info("✅ 데이터베이스 연결 완료")
+            logger.info("✅ 데이터베이스 연결 풀 초기화 완료")
+            logger.info(f"   연결 정보: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
+            
+            # 연결 테스트
+            self._test_connection()
+            
+        except psycopg2.OperationalError as e:
+            logger.error(f"❌ 데이터베이스 연결 실패 (연결 불가)")
+            logger.error(f"   Host: {DB_CONFIG['host']}")
+            logger.error(f"   Port: {DB_CONFIG['port']}")
+            logger.error(f"   Database: {DB_CONFIG['database']}")
+            logger.error(f"   User: {DB_CONFIG['user']}")
+            logger.error(f"   Error: {e}")
+            raise
         except Exception as e:
             logger.error(f"❌ 데이터베이스 연결 실패: {e}")
             raise
+
+    def _test_connection(self):
+        """연결 테스트"""
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1;")
+            cursor.fetchone()
+            cursor.close()
+            logger.info("✅ 데이터베이스 연결 테스트 성공")
+        except Exception as e:
+            logger.error(f"❌ 데이터베이스 연결 테스트 실패: {e}")
+            raise
+        finally:
+            if conn:
+                self.return_connection(conn)
 
     def get_connection(self):
         """연결 풀에서 연결 가져오기"""
@@ -47,21 +83,37 @@ class DatabaseManager:
         Instagram SNS 링크가 있는 클럽 정보 조회
         
         Returns:
-            클럽 정보 리스트 [{'club_id': int, 'name': str, 'instagram_url': str}, ...]
+            클럽 정보 리스트 [{'club_id': int, 'name': str, 'instagram_url': str, 'last_post_url': str or None}, ...]
         """
         conn = None
+        cursor = None
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
             
             query = """
                 SELECT 
-                    id,
-                    name,
-                    sns_links
-                FROM club_tb
-                WHERE sns_links IS NOT NULL
-                AND sns_links::text LIKE '%instagram%';
+                    c.id,
+                    c.name,
+                    c.sns_links,
+                    (
+                        SELECT 
+                            CASE 
+                                WHEN jsonb_typeof(p.sns_links) = 'array' THEN p.sns_links->0->>'instagram'
+                                ELSE p.sns_links->>'instagram'
+                            END
+                        FROM perform_tmp p
+                        WHERE p.club_id = c.id
+                        AND (
+                            (jsonb_typeof(p.sns_links) = 'array' AND p.sns_links->0->>'instagram' IS NOT NULL)
+                            OR (jsonb_typeof(p.sns_links) = 'object' AND p.sns_links->>'instagram' IS NOT NULL)
+                        )
+                        ORDER BY p.created_at DESC
+                        LIMIT 1
+                    ) as last_post_url
+                FROM club_tb c
+                WHERE c.sns_links IS NOT NULL
+                AND c.sns_links::text LIKE '%instagram%';
             """
             
             cursor.execute(query)
@@ -69,7 +121,7 @@ class DatabaseManager:
             
             clubs = []
             for row in rows:
-                club_id, name, sns_links = row
+                club_id, name, sns_links, last_post_url = row
                 
                 # sns_links에서 Instagram URL 추출
                 if sns_links:
@@ -80,20 +132,36 @@ class DatabaseManager:
                                 clubs.append({
                                     'club_id': club_id,
                                     'name': name,
-                                    'instagram_url': instagram_url
+                                    'instagram_url': instagram_url,
+                                    'last_post_url': last_post_url
                                 })
                                 break
             
             logger.info(f"✅ Instagram 연동 클럽 {len(clubs)}개 조회 완료")
+            
+            # 각 클럽의 마지막 게시물 로깅
+            for club in clubs:
+                if club['last_post_url']:
+                    logger.info(f"   [{club['name']}] 마지막 저장: {club['last_post_url']}")
+                else:
+                    logger.info(f"   [{club['name']}] 신규 클럽 (저장된 게시물 없음)")
+            
             return clubs
             
+        except psycopg2.OperationalError as e:
+            logger.error(f"❌ 데이터베이스 연결 오류: {e}")
+            logger.error(f"   DB 설정 확인: {DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
+            return []
         except Exception as e:
             logger.error(f"❌ 클럽 정보 조회 오류: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
             
         finally:
-            if conn:
+            if cursor:
                 cursor.close()
+            if conn:
                 self.return_connection(conn)
 
     def get_club_by_name(self, name: str) -> Optional[Dict]:
@@ -113,12 +181,27 @@ class DatabaseManager:
             
             query = """
                 SELECT 
-                    id,
-                    name,
-                    sns_links
-                FROM club_tb
-                WHERE name = %s
-                AND sns_links IS NOT NULL;
+                    c.id,
+                    c.name,
+                    c.sns_links,
+                    (
+                        SELECT 
+                            CASE 
+                                WHEN jsonb_typeof(p.sns_links) = 'array' THEN p.sns_links->0->>'instagram'
+                                ELSE p.sns_links->>'instagram'
+                            END
+                        FROM perform_tmp p
+                        WHERE p.club_id = c.id
+                        AND (
+                            (jsonb_typeof(p.sns_links) = 'array' AND p.sns_links->0->>'instagram' IS NOT NULL)
+                            OR (jsonb_typeof(p.sns_links) = 'object' AND p.sns_links->>'instagram' IS NOT NULL)
+                        )
+                        ORDER BY p.created_at DESC
+                        LIMIT 1
+                    ) as last_post_url
+                FROM club_tb c
+                WHERE c.name = %s
+                AND c.sns_links IS NOT NULL;
             """
             
             cursor.execute(query, (name,))
@@ -127,7 +210,7 @@ class DatabaseManager:
             if not row:
                 return None
             
-            club_id, name, sns_links = row
+            club_id, name, sns_links, last_post_url = row
             
             # Instagram URL 추출
             instagram_url = ''
@@ -143,7 +226,8 @@ class DatabaseManager:
             return {
                 'club_id': club_id,
                 'name': name,
-                'instagram_url': instagram_url
+                'instagram_url': instagram_url,
+                'last_post_url': last_post_url
             }
             
         except Exception as e:
@@ -172,11 +256,26 @@ class DatabaseManager:
             
             query = """
                 SELECT 
-                    id,
-                    name,
-                    sns_links
-                FROM club_tb
-                WHERE sns_links::text LIKE %s;
+                    c.id,
+                    c.name,
+                    c.sns_links,
+                    (
+                        SELECT 
+                            CASE 
+                                WHEN jsonb_typeof(p.sns_links) = 'array' THEN p.sns_links->0->>'instagram'
+                                ELSE p.sns_links->>'instagram'
+                            END
+                        FROM perform_tmp p
+                        WHERE p.club_id = c.id
+                        AND (
+                            (jsonb_typeof(p.sns_links) = 'array' AND p.sns_links->0->>'instagram' IS NOT NULL)
+                            OR (jsonb_typeof(p.sns_links) = 'object' AND p.sns_links->>'instagram' IS NOT NULL)
+                        )
+                        ORDER BY p.created_at DESC
+                        LIMIT 1
+                    ) as last_post_url
+                FROM club_tb c
+                WHERE c.sns_links::text LIKE %s;
             """
             
             cursor.execute(query, (f'%{instagram_url}%',))
@@ -185,12 +284,13 @@ class DatabaseManager:
             if not row:
                 return None
             
-            club_id, name, sns_links = row
+            club_id, name, sns_links, last_post_url = row
             
             return {
                 'club_id': club_id,
                 'name': name,
-                'instagram_url': instagram_url
+                'instagram_url': instagram_url,
+                'last_post_url': last_post_url
             }
             
         except Exception as e:
@@ -219,9 +319,9 @@ class DatabaseManager:
             
             # sns_links 데이터 준비
             post_url = post_data.get('post_url', '')
-            sns_links = [{
+            sns_links = {
                 'instagram': post_url
-            }]
+            }
             sns_links_json = json.dumps(sns_links, ensure_ascii=False)
 
             # INSERT 쿼리
@@ -288,16 +388,23 @@ class DatabaseManager:
             conn = self.get_connection()
             cursor = conn.cursor()
 
+            # sns_links가 배열 또는 객체 형식 모두 지원
             query = """
                 SELECT COUNT(*) 
                 FROM perform_tmp
-                WHERE sns_links->>'instagram' = %s
-                AND club_id = %s;
+                WHERE club_id = %s
+                AND (
+                    (jsonb_typeof(sns_links) = 'array' AND sns_links->0->>'instagram' = %s)
+                    OR (jsonb_typeof(sns_links) = 'object' AND sns_links->>'instagram' = %s)
+                );
             """
 
-            cursor.execute(query, (instagram_url, club_id))
+            cursor.execute(query, (club_id, instagram_url, instagram_url))
             count = cursor.fetchone()[0]
 
+            if count > 0:
+                logger.info(f"   🔍 중복 확인: 이미 존재함 ({instagram_url})")
+            
             return count > 0
 
         except Exception as e:

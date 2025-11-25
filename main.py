@@ -90,7 +90,8 @@ def run_bulk_scraping(db_manager, scraper, image_manager):
     
     logger.info(f"📊 총 {len(clubs)}개 클럽 발견")
     for club in clubs:
-        logger.info(f"   - {club['name']} (ID: {club['club_id']}): {club['instagram_url']}")
+        last_post_info = f" (마지막 저장: {club['last_post_url']})" if club['last_post_url'] else " (신규 클럽)"
+        logger.info(f"   - {club['name']} (ID: {club['club_id']}){last_post_info}")
     
     all_posts = []
     total_stats = {
@@ -105,16 +106,25 @@ def run_bulk_scraping(db_manager, scraper, image_manager):
         try:
             logger.info(f"\n[{i}/{len(clubs)}] 📱 클럽: {club['name']}")
             logger.info(f"   Instagram: {club['instagram_url']}")
+            
+            if club['last_post_url']:
+                logger.info(f"   📌 마지막 저장 게시물 이후만 수집")
+            else:
+                logger.info(f"   🆕 신규 클럽 - 전체 게시물 수집")
+            
             logger.info("-" * 60)
             
-            # 게시물 수집
-            posts = scraper.scrape_channel_by_url(club['instagram_url'])
+            # 게시물 수집 (마지막 저장 게시물 이후 + 날짜 범위 내)
+            posts = scraper.scrape_channel_by_url(
+                instagram_url=club['instagram_url'],
+                last_post_url=club['last_post_url']
+            )
             
             # club_id 추가
             for post in posts:
                 post['club_id'] = club['club_id']
             
-            logger.info(f"📊 {club['name']} 수집 완료: {len(posts)}개 게시물")
+            logger.info(f"📊 {club['name']} 수집 완료: {len(posts)}개 새 게시물")
             
             # 게시물 처리
             if posts:
@@ -131,6 +141,8 @@ def run_bulk_scraping(db_manager, scraper, image_manager):
                             total_stats['images_failed'] += 1
                     else:
                         total_stats['failed'] += 1
+            else:
+                logger.info(f"ℹ️ {club['name']}: 새로운 게시물 없음")
             
             all_posts.extend(posts)
             
@@ -167,16 +179,25 @@ def run_single_scraping(db_manager, scraper, image_manager, target):
         return [], {'success': 0, 'skipped': 0, 'failed': 0, 'images_uploaded': 0, 'images_failed': 0}
     
     logger.info(f"✅ 클럽 발견: {club['name']} (ID: {club['club_id']})")
-    logger.info(f"   Instagram: {club['instagram_url']}\n")
+    logger.info(f"   Instagram: {club['instagram_url']}")
+    
+    if club['last_post_url']:
+        logger.info(f"   📌 마지막 저장 게시물: {club['last_post_url']}")
+        logger.info(f"   → 이후의 최신 게시물만 수집합니다\n")
+    else:
+        logger.info(f"   🆕 신규 클럽 - 전체 게시물 수집\n")
     
     # 게시물 수집
-    posts = scraper.scrape_channel_by_url(club['instagram_url'])
+    posts = scraper.scrape_channel_by_url(
+        instagram_url=club['instagram_url'],
+        last_post_url=club['last_post_url']
+    )
     
     # club_id 추가
     for post in posts:
         post['club_id'] = club['club_id']
     
-    logger.info(f"📊 수집 완료: {len(posts)}개 게시물")
+    logger.info(f"📊 수집 완료: {len(posts)}개 새 게시물")
     
     total_stats = {
         'success': 0,
@@ -201,14 +222,17 @@ def run_single_scraping(db_manager, scraper, image_manager, target):
                     total_stats['images_failed'] += 1
             else:
                 total_stats['failed'] += 1
+    else:
+        logger.info(f"ℹ️ 새로운 게시물이 없습니다")
     
     return posts, total_stats
 
 
-def print_summary(posts, stats):
+def print_summary(posts, stats, days):
     """최종 결과 출력"""
     logger.info(f"{'='*60}")
     logger.info(f"🎉 스크래핑 작업 완료")
+    logger.info(f"📅 수집 기간: 최근 {days}일")
     logger.info(f"📊 총 수집: {len(posts)}개")
     logger.info(f"✅ 공연 정보 저장 성공: {stats['success']}개")
     logger.info(f"🖼️ 이미지 업로드 성공: {stats['images_uploaded']}개")
@@ -224,14 +248,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 사용 예시:
-  # 일괄 수집 (DB의 모든 클럽)
+  # 일괄 수집 (DB의 모든 클럽, 최근 7일)
+  python main.py --mode bulk --days 7
+  
+  # 단건 수집 (클럽명, 최근 3일)
+  python main.py --mode single --target "홍대앞FF" --days 3
+  
+  # 단건 수집 (Instagram URL, 최근 30일)
+  python main.py --mode single --target "https://www.instagram.com/hongdaeff/" --days 30
+  
+  # 일괄 수집 (기본값 7일)
   python main.py --mode bulk
   
-  # 단건 수집 (클럽명)
-  python main.py --mode single --target "홍대앞FF"
-  
-  # 단건 수집 (Instagram URL)
-  python main.py --mode single --target "https://www.instagram.com/hongdaeff/"
+  # 전체 게시물 수집 (최근 365일)
+  python main.py --mode bulk --days 365
         """
     )
     
@@ -249,20 +279,35 @@ def main():
         help='단건 수집 시 대상 (클럽명 또는 Instagram URL)'
     )
     
+    parser.add_argument(
+        '--days',
+        type=int,
+        default=1,
+        help='수집 기간: 최근 며칠 이내 게시물 (기본값: 1일)'
+    )
+    
     args = parser.parse_args()
     
     # 단건 모드인데 target이 없으면 에러
     if args.mode == 'single' and not args.target:
         parser.error("--mode single 사용 시 --target 필수")
     
+    # days 유효성 검증
+    if args.days < 1:
+        parser.error("--days는 1 이상이어야 합니다")
+    
     logger.info("🚀 Instagram 공연 정보 수집 시스템 시작\n")
     logger.info(f"실행 시간: {datetime.now()}")
+    logger.info(f"수집 모드: {args.mode}")
+    logger.info(f"수집 기간: 최근 {args.days}일")
+    if args.mode == 'single':
+        logger.info(f"대상: {args.target}")
     
     db_manager = None
     
     try:
         # DB 연결
-        logger.info("데이터베이스 연결 중...")
+        logger.info("\n데이터베이스 연결 중...")
         db_manager = DatabaseManager()
         
         # R2 스토리지 초기화
@@ -272,8 +317,8 @@ def main():
         # 이미지 매니저 초기화
         image_manager = ImageManager(r2_storage)
         
-        # 스크래퍼 초기화
-        scraper = InstagramScraper()
+        # 스크래퍼 초기화 (일수 전달)
+        scraper = InstagramScraper(days=args.days)
         
         # 모드에 따라 실행
         if args.mode == 'bulk':
@@ -282,7 +327,7 @@ def main():
             posts, stats = run_single_scraping(db_manager, scraper, image_manager, args.target)
         
         # 결과 출력
-        print_summary(posts, stats)
+        print_summary(posts, stats, args.days)
         
     except Exception as e:
         logger.error(f"❌ 실행 중 오류: {str(e)}")
