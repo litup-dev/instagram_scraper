@@ -11,8 +11,8 @@ INSTAGRAM_PASSWORD = os.getenv('INSTAGRAM_PASSWORD', '')
 CHANNELS = [
     # {'username': 'ovantgarde', 'club_id': 1},
     # {'username': 'clubbbang', 'club_id': 2},
-    {'username': 'hongdaeff', 'club_id': 3},
-    # {'username': 'unplugged_stage', 'club_id': 4},
+    # {'username': 'hongdaeff', 'club_id': 3},
+    {'username': 'unplugged_stage', 'club_id': 4},
 ]
 
 # 로그 설정

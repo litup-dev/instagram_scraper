@@ -59,9 +59,9 @@ class DatabaseManager:
             
             # sns_links 데이터 준비
             post_url = post_data.get('post_url', '')
-            sns_links = {
+            sns_links = [{
                 'instagram': post_url
-            }
+            }]
             sns_links_json = json.dumps(sns_links, ensure_ascii=False)
 
             # INSERT 쿼리
