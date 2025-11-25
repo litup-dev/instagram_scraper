@@ -12,21 +12,19 @@ pip install -r requirements.txt
 ```
 
 ## 사용법
+```bash
+# 전체 클럽 일괄 수집
+python main.py --mode bulk
 
-### 채널 추가
+# 특정 클럽만 수집 (클럽명)
+python main.py --mode single --target "unplugged_stage"
 
-\`config/settings.py\` 파일의 \`CHANNELS\` 리스트에 추가:
+# 특정 클럽만 수집 (URL)
+python main.py --mode single --target "https://www.instagram.com/unplugged_stage/"
 
-```python
-CHANNELS = [
-    {'username': 'ovantgarde', 'club_id': 1},
-    {'username': 'clubbbang', 'club_id': 2},
-    {'username': 'hongdaeff', 'club_id': 3},
-    {'username': 'unplugged_stage', 'club_id': 4},
-    {'username': 'new_channel', 'club_id': 5},  # 새 채널 추가
-]
+# 도움말 확인
+python main.py --help
 ```
-
 
 ## 구조
 

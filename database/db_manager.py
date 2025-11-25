@@ -42,6 +42,166 @@ class DatabaseManager:
         self.connection_pool.closeall()
         logger.info("✅ 모든 데이터베이스 연결 종료")
 
+    def get_clubs_with_instagram(self) -> List[Dict]:
+        """
+        Instagram SNS 링크가 있는 클럽 정보 조회
+        
+        Returns:
+            클럽 정보 리스트 [{'club_id': int, 'name': str, 'instagram_url': str}, ...]
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            query = """
+                SELECT 
+                    id,
+                    name,
+                    sns_links
+                FROM club_tb
+                WHERE sns_links IS NOT NULL
+                AND sns_links::text LIKE '%instagram%';
+            """
+            
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            
+            clubs = []
+            for row in rows:
+                club_id, name, sns_links = row
+                
+                # sns_links에서 Instagram URL 추출
+                if sns_links:
+                    for link in sns_links:
+                        if 'instagram' in link:
+                            instagram_url = link.get('instagram', '')
+                            if instagram_url:
+                                clubs.append({
+                                    'club_id': club_id,
+                                    'name': name,
+                                    'instagram_url': instagram_url
+                                })
+                                break
+            
+            logger.info(f"✅ Instagram 연동 클럽 {len(clubs)}개 조회 완료")
+            return clubs
+            
+        except Exception as e:
+            logger.error(f"❌ 클럽 정보 조회 오류: {e}")
+            return []
+            
+        finally:
+            if conn:
+                cursor.close()
+                self.return_connection(conn)
+
+    def get_club_by_name(self, name: str) -> Optional[Dict]:
+        """
+        클럽명으로 클럽 정보 조회
+        
+        Args:
+            name: 클럽명
+            
+        Returns:
+            클럽 정보 또는 None
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            query = """
+                SELECT 
+                    id,
+                    name,
+                    sns_links
+                FROM club_tb
+                WHERE name = %s
+                AND sns_links IS NOT NULL;
+            """
+            
+            cursor.execute(query, (name,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+            
+            club_id, name, sns_links = row
+            
+            # Instagram URL 추출
+            instagram_url = ''
+            if sns_links:
+                for link in sns_links:
+                    if 'instagram' in link:
+                        instagram_url = link.get('instagram', '')
+                        break
+            
+            if not instagram_url:
+                return None
+            
+            return {
+                'club_id': club_id,
+                'name': name,
+                'instagram_url': instagram_url
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ 클럽 조회 오류: {e}")
+            return None
+            
+        finally:
+            if conn:
+                cursor.close()
+                self.return_connection(conn)
+
+    def get_club_by_instagram_url(self, instagram_url: str) -> Optional[Dict]:
+        """
+        Instagram URL로 클럽 정보 조회
+        
+        Args:
+            instagram_url: Instagram URL
+            
+        Returns:
+            클럽 정보 또는 None
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            
+            query = """
+                SELECT 
+                    id,
+                    name,
+                    sns_links
+                FROM club_tb
+                WHERE sns_links::text LIKE %s;
+            """
+            
+            cursor.execute(query, (f'%{instagram_url}%',))
+            row = cursor.fetchone()
+            
+            if not row:
+                return None
+            
+            club_id, name, sns_links = row
+            
+            return {
+                'club_id': club_id,
+                'name': name,
+                'instagram_url': instagram_url
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ 클럽 조회 오류: {e}")
+            return None
+            
+        finally:
+            if conn:
+                cursor.close()
+                self.return_connection(conn)
+
     def insert_performance(self, post_data: Dict) -> Optional[int]:
         """
         공연 정보 삽입
@@ -117,7 +277,7 @@ class DatabaseManager:
         중복 게시물 확인
         
         Args:
-            post_id: Instagram 게시물 ID
+            instagram_url: Instagram 게시물 URL
             club_id: 클럽 ID
             
         Returns:
@@ -149,51 +309,12 @@ class DatabaseManager:
                 cursor.close()
                 self.return_connection(conn)
 
-    def bulk_insert_performances(self, posts_data: List[Dict]) -> Dict[str, int]:
-        """
-        여러 공연 정보 일괄 삽입
-        
-        Args:
-            posts_data: 게시물 데이터 리스트
-            
-        Returns:
-            삽입 결과 통계 {'success': 성공 수, 'skipped': 중복 수, 'failed': 실패 수}
-        """
-        results = {'success': 0, 'skipped': 0, 'failed': 0}
-
-        for post in posts_data:
-            try:
-                # 중복 확인
-                if self.check_duplicate_post(post.get('post_url'), post.get('club_id')):
-                    logger.info(f"⚠️ 중복 게시물 건너뛰기: {post.get('post_url')}")
-                    results['skipped'] += 1
-                    continue
-
-                # 삽입
-                inserted_id = self.insert_performance(post)
-                if inserted_id:
-                    results['success'] += 1
-                else:
-                    results['failed'] += 1
-
-            except Exception as e:
-                logger.error(f"❌ 일괄 삽입 중 오류: {e}")
-                results['failed'] += 1
-
-        return results
-
     def insert_performance_image(self, image_data: Dict) -> Optional[int]:
         """
         공연 이미지 정보 삽입
         
         Args:
-            image_data: 이미지 데이터 {
-                'perform_id': int,
-                'file_path': str,
-                'file_size': int,
-                'original_name': str,
-                'is_main': bool
-            }
+            image_data: 이미지 데이터
             
         Returns:
             삽입된 이미지 ID 또는 None
@@ -242,30 +363,3 @@ class DatabaseManager:
             if conn:
                 cursor.close()
                 self.return_connection(conn)
-
-
-    def bulk_insert_performance_images(self, images_data: List[Dict]) -> Dict[str, int]:
-        """
-        여러 이미지 정보 일괄 삽입
-        
-        Args:
-            images_data: 이미지 데이터 리스트
-            
-        Returns:
-            삽입 결과 통계 {'success': 성공 수, 'failed': 실패 수}
-        """
-        results = {'success': 0, 'failed': 0}
-
-        for image_data in images_data:
-            try:
-                image_id = self.insert_performance_image(image_data)
-                if image_id:
-                    results['success'] += 1
-                else:
-                    results['failed'] += 1
-
-            except Exception as e:
-                logger.error(f"❌ 이미지 일괄 삽입 중 오류: {e}")
-                results['failed'] += 1
-
-        return results
