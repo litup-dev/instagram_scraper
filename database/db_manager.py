@@ -93,7 +93,7 @@ class DatabaseManager:
             
             # INSERT 쿼리
             insert_query = """
-                INSERT INTO perform_tb (
+                INSERT INTO perform_tmp (
                     club_id, 
                     user_id, 
                     artists, 
@@ -171,7 +171,7 @@ class DatabaseManager:
 
             query = """
                 SELECT COUNT(*) 
-                FROM perform_tb 
+                FROM perform_tmp
                 WHERE sns_links->>'instagram' = %s
                 AND club_id = %s;
             """
@@ -223,7 +223,7 @@ class DatabaseManager:
 
         return results
 
-        def insert_performance_image(self, image_data: Dict) -> Optional[int]:
+    def insert_performance_image(self, image_data: Dict) -> Optional[int]:
         """
         공연 이미지 정보 삽입
         
@@ -245,7 +245,7 @@ class DatabaseManager:
             cursor = conn.cursor()
 
             insert_query = """
-                INSERT INTO perform_img_tb (
+                INSERT INTO perform_img_tmp (
                     perform_id,
                     file_path,
                     file_size,
@@ -288,7 +288,7 @@ class DatabaseManager:
                 self.return_connection(conn)
 
 
-        def bulk_insert_performance_images(self, images_data: List[Dict]) -> Dict[str, int]:
+    def bulk_insert_performance_images(self, images_data: List[Dict]) -> Dict[str, int]:
         """
         여러 이미지 정보 일괄 삽입
         

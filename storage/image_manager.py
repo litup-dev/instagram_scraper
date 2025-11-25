@@ -78,8 +78,8 @@ class ImageManager:
             uuid_str = str(uuid.uuid4())
             file_name = f"{uuid_str}{extension}"
 
-            # R2 경로: performance/{perform_id}/{filename}
-            file_path = f"performance/{perform_id}/{file_name}"
+            # R2 경로: perform_tmp/{perform_id}/{filename}
+            file_path = f"perform_tmp/{perform_id}/{file_name}"
             
             # 4. R2 업로드
             logger.info(f"📤 R2 업로드 시작: {file_path}")
