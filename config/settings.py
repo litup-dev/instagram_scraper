@@ -27,3 +27,13 @@ DB_CONFIG = {
     'user': os.getenv('DB_USER', 'litup'),
     'password': os.getenv('DB_PASSWORD', 'litup')
 }
+
+# R2 스토리지 설정
+R2_CONFIG = {
+    'bucket_name': os.getenv('R2_BUCKET_NAME', 'litup'),
+    'access_key_id': os.getenv('R2_ACCESS_KEY_ID', ''),
+    'secret_access_key': os.getenv('R2_SECRET_ACCESS_KEY', ''),
+    'endpoint_url': os.getenv('R2_ENDPOINT_URL', ''),
+    'region': os.getenv('R2_REGION', 'auto')
+}
+

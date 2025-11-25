@@ -222,3 +222,94 @@ class DatabaseManager:
                 results['failed'] += 1
 
         return results
+
+        def insert_performance_image(self, image_data: Dict) -> Optional[int]:
+        """
+        공연 이미지 정보 삽입
+        
+        Args:
+            image_data: 이미지 데이터 {
+                'perform_id': int,
+                'file_path': str,
+                'file_size': int,
+                'original_name': str,
+                'is_main': bool
+            }
+            
+        Returns:
+            삽입된 이미지 ID 또는 None
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+
+            insert_query = """
+                INSERT INTO perform_img_tb (
+                    perform_id,
+                    file_path,
+                    file_size,
+                    original_name,
+                    is_main,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    %s, %s, %s, %s, %s, NOW(), NOW()
+                )
+                RETURNING id;
+            """
+
+            cursor.execute(insert_query, (
+                image_data['perform_id'],
+                image_data['file_path'],
+                image_data['file_size'],
+                image_data['original_name'],
+                image_data.get('is_main', True)
+            ))
+
+            image_id = cursor.fetchone()[0]
+            conn.commit()
+
+            logger.info(f"✅ 이미지 정보 저장 완료 (ID: {image_id})")
+            logger.info(f"   파일: {image_data['original_name']}")
+            logger.info(f"   크기: {image_data['file_size'] / 1024:.2f} KB")
+            
+            return image_id
+
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error(f"❌ 이미지 정보 저장 오류: {e}")
+            return None
+
+        finally:
+            if conn:
+                cursor.close()
+                self.return_connection(conn)
+
+
+        def bulk_insert_performance_images(self, images_data: List[Dict]) -> Dict[str, int]:
+        """
+        여러 이미지 정보 일괄 삽입
+        
+        Args:
+            images_data: 이미지 데이터 리스트
+            
+        Returns:
+            삽입 결과 통계 {'success': 성공 수, 'failed': 실패 수}
+        """
+        results = {'success': 0, 'failed': 0}
+
+        for image_data in images_data:
+            try:
+                image_id = self.insert_performance_image(image_data)
+                if image_id:
+                    results['success'] += 1
+                else:
+                    results['failed'] += 1
+
+            except Exception as e:
+                logger.error(f"❌ 이미지 일괄 삽입 중 오류: {e}")
+                results['failed'] += 1
+
+        return results
