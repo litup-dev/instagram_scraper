@@ -34,21 +34,18 @@ CHANNELS = [
 instagram-concert-scraper/
 ├── config/
 │   └── settings.py              # 설정 파일
+├── database/
+│   ├── db_manager.py             # DB 연동
+│   └── tmp_DDL.sql               # perfom_tmp/perform_img_tmp TABLE DDL
 ├── scraper/
 │   └── instagram_scraper.py     # Instagram 스크래퍼
-├── tests/                         # 테스트 폴더 
-│   ├── test_date_extractor.py
-│   ├── test_price_extractor.py
-│   ├── test_title_extractor.py
-│   └── test_artist_extractor.py
+├── storage/
+│   ├── image_manager.py                # 게시물 포스터 이미지 다운로드 및 업로드 
+│   └── r2_storage.sql                  # R2 스토리지 연동
+├── tests/                       # 테스트 폴더 
+│   └── login.py
 ├── utils/
-│   ├── logger.py                # 로깅 유틸리티
-│   └── parser/                    # 파서 모듈화
-│       ├── __init__.py           # Parser 클래스 
-│       ├── date_extractor.py    # 날짜 추출
-│       ├── price_extractor.py   # 가격 추출
-│       ├── title_extractor.py   # 제목 추출
-│       └── artist_extractor.py  # 아티스트 추출
+│   └── logger.py                # 로깅 유틸리티
 ├── .env
 ├── main.py                      # 메인 실행 파일
 ├── requirements.txt
@@ -62,5 +59,4 @@ instagram-concert-scraper/
 ## 추가 구현해야할 사항
 
 - [ ] 실제 이미지 파일 다운로드 및 저장
-- [ ] 정교한 공연 정보 추출 로직
 - [ ] 데이터베이스 연동

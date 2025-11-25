@@ -75,7 +75,6 @@ def run_scraping_job():
                             
                             if perform_id:
                                 total_stats['success'] += 1
-                                logger.info(f"✅ 공연 정보 저장 완료 (ID: {perform_id})")
                                 
                                 # 이미지 다운로드 및 업로드
                                 image_url = post.get('image_url')
@@ -94,7 +93,6 @@ def run_scraping_job():
                                         
                                         if image_id:
                                             total_stats['images_uploaded'] += 1
-                                            logger.info(f"✅ 이미지 저장 완료 (Image ID: {image_id})")
                                         else:
                                             total_stats['images_failed'] += 1
                                             logger.warning(f"⚠️ 이미지 DB 저장 실패")

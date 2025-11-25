@@ -6,7 +6,6 @@ import uuid, os
 from io import BytesIO
 from PIL import Image
 from typing import Optional, Dict, List
-from datetime import datetime
 from utils.logger import setup_logger
 from storage.r2_storage import R2StorageAdapter
 
@@ -73,7 +72,6 @@ class ImageManager:
                 return None
             
             # 3. 파일명 생성
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             extension = self._get_extension(image_url, img.format)
             uuid_str = str(uuid.uuid4())
             file_name = f"{uuid_str}{extension}"

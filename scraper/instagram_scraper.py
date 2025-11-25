@@ -7,7 +7,6 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 import time, os, re, json
 from utils.logger import setup_logger
-from utils.parser import Parser, PerformanceParseError
 from config.settings import INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD
 
 logger = setup_logger('instagram_scraper')
@@ -24,7 +23,7 @@ NOT_PERFORMANCE_KEYWORDS = [
 ]
 
 # 가져올 게시물 수
-AMOUNT = 5
+AMOUNT = 1
 
 # 게시물 수집 시, 최근 CUTOFF_DAYS 일 이내 게시물만 수집
 CUTOFF_DAYS = 0
@@ -34,7 +33,6 @@ class InstagramScraper:
         self.client = Client()
         self.client.request_timeout = 10 #10초 안에 응답이 없으면 TimeoutError로 실패 처리
         self.client.delay_range = [2, 5] # 봇 차단 방지용 지연요청 → API 요청 사이의 대기 시간 2초~5초 랜덤
-        self.parser = Parser()
         self.session_file = 'instagram_session.json'
         self._login()
     
@@ -99,19 +97,6 @@ class InstagramScraper:
                 user_info = self.client.user_info_by_username_v1(username)
                 user_id = user_info.pk
                     
-                # 프로필 URL 추출 (linktr.ee 등)
-                profile_external_url = getattr(user_info, 'external_url', None)
-                bio = getattr(user_info, 'biography', '')
-                
-                # 바이오에서 URL 추출 시도
-                profile_url = profile_external_url
-                if not profile_url and bio:
-                    # Parser의 url_extractor 사용
-                    profile_url = self.parser.url_extractor.extract_profile_url_from_bio(bio)
-                
-                if profile_url:
-                    logger.info(f"🔗 프로필 URL: {profile_url}")
-                
             except UserNotFound:
                 logger.error(f"❌ {username}: 존재하지 않는 사용자")
                 return []
@@ -144,38 +129,19 @@ class InstagramScraper:
                     if cutoff_date and media.taken_at < cutoff_date:
                         logger.info(f"⏰ {CUTOFF_DAYS} 일 이전 게시물 도달, 중단")
                         break
-                                        
-                    # 공연 관련 게시물인지 확인
-                    if self._is_performance_post(media):
                         
-                        post_data = self._extract_post_data(media, profile_url)
-                        if post_data:
-                            posts.append(post_data)
-                            logger.info(f"✅ [{i}/{len(medias)}] 공연: {post_data.get('title', '')}")
-                            
-                            # 파싱 후
-                            logger.info("\n" + "✨ 파싱 후 결과".center(80, "="))
-                            logger.info(json.dumps({
-                                'post_url': post_data.get('post_url'),
-                                'title': post_data.get('title', 'N/A'),
-                                'perform_date': post_data.get('perform_date', 'N/A'),
-                                'onsite_price': post_data.get('onsite_price', 'N/A'),
-                                'booking_price': post_data.get('booking_price', 'N/A'),
-                                'artists_count': len(post_data.get('artists', [])),
-                                'artists': post_data.get('artists', []),
-                                'booking_url': post_data.get('booking_url', 'N/A'),
-                                '원본 데이터': media.caption_text or ''
-                            }, ensure_ascii=False, indent=2))
-                            logger.info("=" * 80 + "\n")
-                    else: 
-
-                        logger.info(f"⚠️ [{i}/{len(medias)}] 공연 게시물 아님")
+                    post_data = self._extract_post_data(media)
+                    if post_data:
+                        posts.append(post_data)
+                        logger.info(f"✅ [{i}/{len(medias)}] 공연: {post_data.get('title', '')}")
+                        
+                        # 파싱 후
+                        logger.info("\n" + "✨ 게시글 정보 ✨".center(80, "="))
                         logger.info(json.dumps({
-                            'post_url': f"https://www.instagram.com/p/{media.code}/",
+                            'post_url': post_data.get('post_url'),
                             '원본 데이터': media.caption_text or ''
                         }, ensure_ascii=False, indent=2))
                         logger.info("=" * 80 + "\n")
-                        
                     # Rate limit 방지 - 매 요청마다 대기
                     time.sleep(5)
                 except Exception as e:
@@ -215,33 +181,9 @@ class InstagramScraper:
             logger.error(traceback.format_exc())
             return []
     
-    def _is_performance_post(self, media) -> bool:
-        # 1. 게시글에 동영상이면 False
-        # if getattr(media, 'media_type', 1) == 2 or getattr(media, 'video_url', None):
-        #     logger.info(f"⛔ 동영상 게시물 제외: {media.code}")
-        #     return False
-
-        """공연 관련 게시물인지 판단"""
-        caption = media.caption_text
-        if not caption:
-            return False
-        
-        caption_lower = caption.lower()
-        
-        # 키워드 체크
-        if any(k in caption_lower for k in PERFORMANCE_KEYWORDS):
-            return True
-
-        if any(k in caption_lower for k in NOT_PERFORMANCE_KEYWORDS):
-            return False
-        
-        return True
-
-
-    def _extract_post_data(self, media, profile_url) -> Dict:
+    def _extract_post_data(self, media) -> Dict:
         """게시물에서 데이터 추출"""
         try:
-            
             image_url = ''
             if hasattr(media, 'thumbnail_url') and media.thumbnail_url:
                 image_url = str(media.thumbnail_url)
@@ -251,18 +193,6 @@ class InstagramScraper:
             caption = media.caption_text or ''
             post_url = f"https://www.instagram.com/p/{media.code}/"
             
-            # 파싱 (post_url 전달)
-            try:
-                performance_info = self.parser.parse_performance_info(caption, post_url, profile_url)
-            except PerformanceParseError as e:
-                logger.warning(f"⚠️ [code:{media.code}] 공연 게시물 아님 \n 이유 : {e}")
-                logger.info(json.dumps({
-                    'post_url': f"https://www.instagram.com/p/{media.code}/",
-                    '원본 데이터': media.caption_text or ''
-                }, ensure_ascii=False, indent=2))
-                logger.info("=" * 80 + "\n")
-                return None 
-           
             # 최종 데이터
             post_data = {
                 'post_id': str(media.code),
@@ -271,11 +201,7 @@ class InstagramScraper:
                 'post_date': getattr(media.taken_at, 'strftime', lambda fmt: None)('%Y-%m-%d %H:%M:%S'),
                 'post_url': post_url,
             }
-            post_data.update(performance_info)
-            
             return post_data
-        except PerformanceParseError as e:
-            return None
         except Exception as e:
             logger.error(f"❌ 데이터 추출 오류: {e}")
             return None

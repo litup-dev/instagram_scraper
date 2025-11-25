@@ -2,14 +2,11 @@
 PostgreSQL 데이터베이스 관리자
 """
 import psycopg2
-from psycopg2.extras import Json, RealDictCursor
-from psycopg2 import pool
-from datetime import datetime
 from typing import List, Dict, Optional
 import json
+from psycopg2 import pool
 from utils.logger import setup_logger
 from config.settings import DB_CONFIG
-import dateparser
 
 logger = setup_logger('db_manager')
 
@@ -59,54 +56,24 @@ class DatabaseManager:
         try:
             conn = self.get_connection()
             cursor = conn.cursor()
-
-            # artists 데이터 
-            artists_json = json.dumps(post_data.get('artists', []), ensure_ascii=False)
             
             # sns_links 데이터 준비
+            post_url = post_data.get('post_url', '')
             sns_links = {
-                'instagram': post_data.get('post_url', ''),
+                'instagram': post_url
             }
             sns_links_json = json.dumps(sns_links, ensure_ascii=False)
 
-            # perform_date 파싱
-            perform_date = None
-            if post_data.get('perform_date'):
-                try:
-                    perform_date = dateparser.parse(post_data['perform_date'])
-                except ValueError:
-                    logger.warning(f"⚠️ 날짜 형식 오류: {post_data.get('perform_date')}")
-            
-            # price
-            booking_price = None
-            onsite_price = None
-            if post_data.get("booking_price") is not None:
-                try:
-                    booking_price = int(post_data["booking_price"])
-                except Exception:
-                    logger.warning(f"⚠️ booking_price 형식 오류: {post_data.get('booking_price')}")
-            if post_data.get("onsite_price") is not None:
-                try:
-                    onsite_price = int(post_data["onsite_price"])
-                except Exception:
-                    logger.warning(f"⚠️ onsite_price 형식 오류: {post_data.get('onsite_price')}")
-            
             # INSERT 쿼리
             insert_query = """
                 INSERT INTO perform_tmp (
                     club_id, 
                     user_id, 
-                    artists, 
                     sns_links, 
-                    onsite_price, 
-                    perform_date, 
-                    booking_price, 
                     is_cancelled, 
-                    title, 
-                    description, 
-                    booking_url
+                    description
                 ) VALUES (
-                    %s, %s, %s::jsonb, %s::jsonb, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s::jsonb, %s, %s
                 )
                 RETURNING id;
             """
@@ -114,15 +81,9 @@ class DatabaseManager:
             cursor.execute(insert_query, (
                 post_data.get('club_id'),
                 1,  # user_id는 임시로 1로 고정
-                artists_json,
                 sns_links_json,
-                onsite_price,
-                perform_date,
-                booking_price,
-                False,  # is_cancelled
-                post_data.get('title', ''),
-                post_data.get('caption', ''),
-                post_data.get('booking_url', ''),
+                False,
+                post_data.get('caption', '')
             ))
 
             # 삽입된 ID 가져오기
@@ -130,8 +91,6 @@ class DatabaseManager:
             conn.commit()
 
             logger.info(f"✅ 공연 정보 저장 완료 (ID: {inserted_id})")
-            logger.info(f"   제목: {post_data.get('title', '')}")
-            logger.info(f"   클럽: {post_data.get('club_id')}")
             
             return inserted_id
 
@@ -145,7 +104,7 @@ class DatabaseManager:
             if conn:
                 conn.rollback()
             logger.error(f"❌ 데이터베이스 삽입 오류: {e}")
-            logger.error(f"   문제 데이터: {post_data.get('post_url', 'N/A')}")
+            logger.error(f"   문제 데이터 Instagram URL : {post_url}")
             return None
 
         finally:
@@ -251,10 +210,9 @@ class DatabaseManager:
                     file_size,
                     original_name,
                     is_main,
-                    created_at,
-                    updated_at
+                    created_at
                 ) VALUES (
-                    %s, %s, %s, %s, %s, NOW(), NOW()
+                    %s, %s, %s, %s, %s, NOW()
                 )
                 RETURNING id;
             """
@@ -271,8 +229,6 @@ class DatabaseManager:
             conn.commit()
 
             logger.info(f"✅ 이미지 정보 저장 완료 (ID: {image_id})")
-            logger.info(f"   파일: {image_data['original_name']}")
-            logger.info(f"   크기: {image_data['file_size'] / 1024:.2f} KB")
             
             return image_id
 
