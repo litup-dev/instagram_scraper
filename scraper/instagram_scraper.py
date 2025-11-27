@@ -252,7 +252,7 @@ class InstagramScraper:
             logger.error(traceback.format_exc())
             return []
     
-    
+
     def scrape_post_by_url(self, post_url: str) -> Optional[Dict]:
         """
         게시물 URL로 직접 스크래핑
@@ -315,19 +315,51 @@ class InstagramScraper:
             return None
 
     def _extract_post_data(self, media) -> Dict:
-        """게시물에서 데이터 추출 - 모든 이미지 URL 수집"""
+        """
+        게시물에서 데이터 추출 - 이미지 게시물만 수집
+        """
         try:
+            # media_type 확인 (1=Image, 2=Video, 8=Carousel)
+            media_type = getattr(media, 'media_type', 0)
+            
+            # 단일 영상 게시물은 제외
+            if media_type == 2:
+                logger.info(f"🎬 영상 게시물 → 건너뛰기")
+                return None
+            
             image_urls = []
             
             # 1. Carousel (다중 이미지/비디오)
             if hasattr(media, 'resources') and media.resources:
                 logger.info(f"📸 Carousel 게시물 감지 (리소스 {len(media.resources)}개)")
+                
+                # Carousel 내 영상 개수 체크
+                video_count = 0
+                for resource in media.resources:
+                    resource_type = getattr(resource, 'media_type', 0)
+                    if resource_type == 2:
+                        video_count += 1
+                
+                # 영상만 있는 Carousel은 제외
+                if video_count == len(media.resources):
+                    logger.info(f"🎬 영상만 있는 Carousel → 건너뛰기")
+                    return None
+                
+                if video_count > 0:
+                    logger.info(f"ℹ️  Carousel 내 영상 {video_count}개는 제외하고 이미지만 수집")
+                
                 for idx, resource in enumerate(media.resources):
-                    # 고화질 이미지 우선 (image_versions2)
+                    resource_type = getattr(resource, 'media_type', 0)
+                    
+                    # 영상인 경우 건너뛰기
+                    if resource_type == 2:
+                        logger.info(f"   [{idx+1}] 🎬 영상 리소스 → 건너뛰기")
+                        continue
+                    
+                    # 고화질 이미지/썸네일 우선
                     if hasattr(resource, 'image_versions2') and resource.image_versions2:
                         candidates = resource.image_versions2.get('candidates', [])
                         if candidates and len(candidates) > 0:
-                            # 첫 번째가 가장 고화질
                             img_url = candidates[0].get('url')
                             if img_url:
                                 image_urls.append(str(img_url))
@@ -339,11 +371,11 @@ class InstagramScraper:
                         image_urls.append(str(resource.thumbnail_url))
                         logger.info(f"   [{idx+1}] 썸네일 이미지: {str(resource.thumbnail_url)[:80]}...")
             
-            # 2. 단일 이미지/비디오
+            # 2. 단일 게시물
             else:
-                logger.info(f"📷 단일 게시물 감지")
+                logger.info(f"📷 단일 이미지 게시물 감지")
                 
-                # 고화질 이미지 우선 (image_versions2)
+                # 고화질 이미지/썸네일 우선
                 if hasattr(media, 'image_versions2') and media.image_versions2:
                     candidates = media.image_versions2.get('candidates', [])
                     if candidates and len(candidates) > 0:
