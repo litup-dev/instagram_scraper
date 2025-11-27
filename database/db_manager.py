@@ -317,11 +317,13 @@ class DatabaseManager:
             conn = self.get_connection()
             cursor = conn.cursor()
             
-            # sns_links 데이터 준비
+            # sns_links 데이터 준비 (배열 형태로 저장)
             post_url = post_data.get('post_url', '')
-            sns_links = {
-                'instagram': post_url
-            }
+            sns_links = [
+                {
+                    'instagram': post_url
+                }
+            ]
             sns_links_json = json.dumps(sns_links, ensure_ascii=False)
 
             # INSERT 쿼리
