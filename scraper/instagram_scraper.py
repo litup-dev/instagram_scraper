@@ -252,14 +252,131 @@ class InstagramScraper:
             logger.error(traceback.format_exc())
             return []
     
-    def _extract_post_data(self, media) -> Dict:
-        """게시물에서 데이터 추출"""
+    
+    def scrape_post_by_url(self, post_url: str) -> Optional[Dict]:
+        """
+        게시물 URL로 직접 스크래핑
+        
+        Args:
+            post_url: Instagram 게시물 URL (예: https://www.instagram.com/p/ABC123/)
+            
+        Returns:
+            게시물 데이터 또는 None
+        """
         try:
-            image_url = ''
-            if hasattr(media, 'thumbnail_url') and media.thumbnail_url:
-                image_url = str(media.thumbnail_url)
-            elif hasattr(media, 'resources') and media.resources:
-                image_url = str(media.resources[0].thumbnail_url)
+            logger.info(f"📥 게시물 URL 스크래핑 시작: {post_url}")
+            
+            # URL에서 shortcode 추출
+            import re
+            match = re.search(r'/p/([^/]+)/', post_url)
+            if not match:
+                logger.error(f"❌ 유효하지 않은 게시물 URL: {post_url}")
+                return None
+            
+            shortcode = match.group(1)
+            logger.info(f"📌 Shortcode: {shortcode}")
+            
+            # 게시물 정보 가져오기
+            # shortcode를 media_pk로 변환
+            media_pk = self.client.media_pk_from_code(shortcode)
+            logger.info(f"📌 Media PK: {media_pk}")
+            
+            # media_pk로 정보 조회
+            media = self.client.media_info(media_pk)
+            
+            if not media:
+                logger.error(f"❌ 게시물을 찾을 수 없습니다: {shortcode}")
+                return None
+            
+            logger.info(f"✅ 게시물 정보 조회 완료")
+            
+            # 데이터 추출
+            post_data = self._extract_post_data(media)
+            
+            if post_data:
+                logger.info(f"✅ 게시물 데이터 추출 완료")
+                
+                # 파싱 정보 로깅
+                logger.info("\n" + "✨ 게시글 정보 ✨".center(80, "="))
+                logger.info(json.dumps({
+                    'post_url': post_data.get('post_url'),
+                    'post_date': post_data.get('post_date'),
+                    'image_count': len(post_data.get('image_urls', [])),
+                    '원본 데이터': (media.caption_text or '')[:200] + '...' if len(media.caption_text or '') > 200 else (media.caption_text or '')
+                }, ensure_ascii=False, indent=2))
+                logger.info("=" * 80 + "\n")
+            
+            return post_data
+            
+        except Exception as e:
+            logger.error(f"❌ 게시물 스크래핑 오류: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
+
+    def _extract_post_data(self, media) -> Dict:
+        """게시물에서 데이터 추출 - 모든 이미지 URL 수집"""
+        try:
+            image_urls = []
+            
+            # 1. Carousel (다중 이미지/비디오)
+            if hasattr(media, 'resources') and media.resources:
+                logger.info(f"📸 Carousel 게시물 감지 (리소스 {len(media.resources)}개)")
+                for idx, resource in enumerate(media.resources):
+                    # 고화질 이미지 우선 (image_versions2)
+                    if hasattr(resource, 'image_versions2') and resource.image_versions2:
+                        candidates = resource.image_versions2.get('candidates', [])
+                        if candidates and len(candidates) > 0:
+                            # 첫 번째가 가장 고화질
+                            img_url = candidates[0].get('url')
+                            if img_url:
+                                image_urls.append(str(img_url))
+                                logger.info(f"   [{idx+1}] 고화질 이미지: {img_url[:80]}...")
+                                continue
+                    
+                    # 대체: thumbnail_url
+                    if hasattr(resource, 'thumbnail_url') and resource.thumbnail_url:
+                        image_urls.append(str(resource.thumbnail_url))
+                        logger.info(f"   [{idx+1}] 썸네일 이미지: {str(resource.thumbnail_url)[:80]}...")
+            
+            # 2. 단일 이미지/비디오
+            else:
+                logger.info(f"📷 단일 게시물 감지")
+                
+                # 고화질 이미지 우선 (image_versions2)
+                if hasattr(media, 'image_versions2') and media.image_versions2:
+                    candidates = media.image_versions2.get('candidates', [])
+                    if candidates and len(candidates) > 0:
+                        img_url = candidates[0].get('url')
+                        if img_url:
+                            image_urls.append(str(img_url))
+                            logger.info(f"   고화질 이미지: {img_url[:80]}...")
+                
+                # 대체 1: thumbnail_url
+                elif hasattr(media, 'thumbnail_url') and media.thumbnail_url:
+                    image_urls.append(str(media.thumbnail_url))
+                    logger.info(f"   썸네일 이미지: {str(media.thumbnail_url)[:80]}...")
+                
+                # 대체 2: display_url (최후의 수단)
+                elif hasattr(media, 'display_url') and media.display_url:
+                    image_urls.append(str(media.display_url))
+                    logger.info(f"   디스플레이 이미지: {str(media.display_url)[:80]}...")
+            
+            # 중복 제거 (순서 유지)
+            seen = set()
+            unique_urls = []
+            for url in image_urls:
+                if url not in seen:
+                    seen.add(url)
+                    unique_urls.append(url)
+            
+            image_urls = unique_urls
+            
+            if not image_urls:
+                logger.warning(f"⚠️ 이미지 URL을 찾을 수 없습니다")
+                logger.warning(f"   media 속성: {dir(media)}")
+            else:
+                logger.info(f"✅ 총 {len(image_urls)}개 이미지 URL 추출 완료")
             
             caption = media.caption_text or ''
             post_url = f"https://www.instagram.com/p/{media.code}/"
@@ -267,12 +384,15 @@ class InstagramScraper:
             # 최종 데이터
             post_data = {
                 'post_id': str(media.code),
-                'image_url': image_url,
+                'image_urls': image_urls,
                 'caption': caption,
                 'post_date': getattr(media.taken_at, 'strftime', lambda fmt: None)('%Y-%m-%d %H:%M:%S'),
                 'post_url': post_url,
             }
             return post_data
+            
         except Exception as e:
             logger.error(f"❌ 데이터 추출 오류: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return None

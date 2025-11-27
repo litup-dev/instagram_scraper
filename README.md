@@ -13,17 +13,25 @@ pip install -r requirements.txt
 
 ## 사용법
 ```bash
-# 일괄 수집 (DB의 모든 클럽, 최근 7일 이내 게시물)
-python main.py --mode bulk --days 7
-
-# 단건 수집 (클럽명, 최근 3일 이내 게시물)
-python main.py --mode single --target "hongdaeff" --days 3
-
-# 단건 수집 (Instagram URL, 최근 3일 이내 게시물)
-python main.py --mode single --target "https://www.instagram.com/hongdaeff/" --days 3
 
 # 일괄 수집 (기본값 1일)
 python main.py --mode bulk
+
+# 일괄 수집 (DB의 모든 클럽, 최근 7일 이내 게시물)
+python main.py --mode bulk --days 7
+
+# 클럽별 수집 (클럽명, 최근 3일 이내 게시물)
+python main.py --mode single --club "hongdaeff" --days 3
+
+# 클럽별 수집 (Instagram URL, 최근 3일 이내 게시물)
+python main.py --mode single --club "https://www.instagram.com/hongdaeff/" --days 3
+
+# 특정 게시물 수집 (클럽명)
+python main.py --mode post --post-url "https://www.instagram.com/p/DRgoKSxkYDI/" --club "strangefruit.seoul"
+
+# 특정 게시물 수집 (Instagram URL)
+python main.py --mode post --post-url "https://www.instagram.com/p/DRgoKSxkYDI/" --club "https://www.instagram.com/strangefruit.seoul/"
+
 
 # 도움말 확인
 python main.py --help
