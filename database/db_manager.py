@@ -113,7 +113,8 @@ class DatabaseManager:
                     ) as last_post_url
                 FROM club_tb c
                 WHERE c.sns_links IS NOT NULL
-                AND c.sns_links::text LIKE '%instagram%';
+                AND c.sns_links::text LIKE '%instagram%'
+                order by ID ASC;
             """
             
             cursor.execute(query)
