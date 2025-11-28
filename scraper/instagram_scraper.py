@@ -19,9 +19,24 @@ class InstagramScraper:
         """
         self.days = days
         self.client = Client()
-        self.client.request_timeout = 10
-        self.client.delay_range = [2, 5]
+        self.client.request_timeout = 30
+        self.client.delay_range = [3, 7]
         self.session_file = 'instagram_session.json'
+        
+        # 디바이스 설정 추가
+        self.client.set_device({
+            "app_version": "269.0.0.18.75",
+            "android_version": 28,
+            "android_release": "9.0",
+            "dpi": "480dpi",
+            "resolution": "1080x2340",
+            "manufacturer": "Samsung",
+            "device": "SM-G973F",
+            "model": "Galaxy S10",
+            "cpu": "exynos9820",
+            "version_code": "314665256"
+        })
+        
         self._login()
     
     def _login(self):
@@ -34,32 +49,65 @@ class InstagramScraper:
             # 저장된 세션 로드 시도
             if os.path.exists(self.session_file):
                 try:
+                    logger.info("🔄 저장된 세션 로드 시도...")
                     self.client.load_settings(self.session_file)
+                    
+                    # 세션 유효성 확인
                     self.client.account_info()
                     logger.info("✅ 저장된 세션 로드 성공\n")
-                    time.sleep(3)
+                    time.sleep(2)
                     return
                 except Exception as e:
                     logger.warning(f"⚠️ 세션 로드 실패: {e}")
+                    logger.info("🔄 새로 로그인 시도...")
+                    
+                    # 실패한 세션 파일 삭제
                     if os.path.exists(self.session_file):
                         os.remove(self.session_file)
+                        logger.info("🗑️  기존 세션 파일 삭제")
             
-            # 새로 로그인
+            # 새로 로그인 (디바이스 설정은 __init__에서 이미 완료)
             logger.info(f"🔐 Instagram 로그인 시도: {INSTAGRAM_USERNAME}")
+            
+            # 로그인 전 잠깐 대기 (Rate Limit 방지)
+            time.sleep(3)
+            
             login_result = self.client.login(INSTAGRAM_USERNAME, INSTAGRAM_PASSWORD)
             
             if not login_result:
                 raise Exception("로그인 실패")
             
+            logger.info("✅ Instagram 로그인 성공!")
+            
+            # 계정 정보 확인
+            try:
+                account = self.client.account_info()
+                logger.info(f"📊 계정 정보:")
+                logger.info(f"   사용자명: {account.username}")
+                logger.info(f"   이름: {account.full_name}")
+            except Exception as e:
+                logger.warning(f"⚠️ 계정 정보 조회 실패: {e}")
+            
             # 세션 저장
             self.client.dump_settings(self.session_file)
-            logger.info("✅ Instagram 로그인 성공 및 세션 저장")
+            logger.info(f"💾 세션 저장: {self.session_file}\n")
+            
+            # 로그인 직후 대기
+            time.sleep(5)
             
         except ChallengeRequired:
             logger.error("❌ Instagram 보안 인증 필요")
+            logger.error("💡 해결 방법:")
+            logger.error("   1. Instagram 앱/웹에서 로그인")
+            logger.error("   2. '의심스러운 로그인 시도' 알림 확인 및 승인")
+            logger.error("   3. 2단계 인증이 활성화되어 있다면 비활성화")
             raise
         except Exception as e:
             logger.error(f"❌ 로그인 실패: {e}")
+            logger.error("💡 해결 방법:")
+            logger.error("   1. 비밀번호 확인")
+            logger.error("   2. 계정이 차단되지 않았는지 확인")
+            logger.error("   3. test/login.py로 수동 로그인 테스트")
             raise
     
     def extract_username_from_url(self, instagram_url: str) -> str:
@@ -140,6 +188,10 @@ class InstagramScraper:
             
             # 게시물 가져오기
             logger.info(f"📋 게시물 가져오는 중... (최대 {FETCH_AMOUNT}개)")
+            
+            # Rate Limit 방지를 위한 딜레이
+            time.sleep(3)
+            
             medias = self.client.user_medias_v1(user_id, FETCH_AMOUNT)
             logger.info(f"✅ 가져온 게시물 수: {len(medias)}개")
             
@@ -208,7 +260,7 @@ class InstagramScraper:
                         logger.info("=" * 80 + "\n")
                     
                     # Rate limit 방지
-                    time.sleep(5)
+                    time.sleep(7)
                     
                 except Exception as e:
                     logger.error(f"❌ 게시물 {i} 처리 오류: {e}")
@@ -221,21 +273,31 @@ class InstagramScraper:
             return posts
             
         except LoginRequired as e:
-            logger.error(f"❌ {username}: 로그인 필요")
+            logger.error(f"❌ {username}: 로그인 필요 - 세션이 만료되었습니다")
             
             # 재시도
             if retry_count < MAX_RETRIES:
-                logger.info("🔄 세션 재설정 후 재시도...")
+                wait_time = 60 * (retry_count + 1)  # 1분, 2분씩 증가
+                logger.info(f"🔄 세션 재설정 후 {wait_time}초 대기 후 재시도... ({retry_count + 1}/{MAX_RETRIES})")
+                
+                # 기존 세션 삭제
                 if os.path.exists(self.session_file):
                     os.remove(self.session_file)
+                    logger.info("🗑️  기존 세션 파일 삭제")
                 
-                # 재로그인
-                self._login()
-                time.sleep(3)
+                # 대기 후 재로그인
+                time.sleep(wait_time)
                 
-                return self.scrape_channel(username, last_post_url, retry_count + 1)
+                try:
+                    self._login()
+                    logger.info("✅ 재로그인 성공, 수집 재개...")
+                    time.sleep(5)
+                    return self.scrape_channel(username, last_post_url, retry_count + 1)
+                except Exception as login_error:
+                    logger.error(f"❌ 재로그인 실패: {login_error}")
+                    return []
             else:
-                logger.error("❌ 최대 재시도 초과")
+                logger.error("❌ 최대 재시도 초과 - 나중에 다시 시도하세요")
                 return []
         
         except PleaseWaitFewMinutes:
@@ -252,7 +314,6 @@ class InstagramScraper:
             logger.error(traceback.format_exc())
             return []
     
-
     def scrape_post_by_url(self, post_url: str) -> Optional[Dict]:
         """
         게시물 URL로 직접 스크래핑
@@ -315,20 +376,18 @@ class InstagramScraper:
             return None
 
     def _extract_post_data(self, media) -> Dict:
-        """
-        게시물에서 데이터 추출 - 이미지 게시물만 수집
-        """
+        """게시물에서 데이터 추출 - 이미지 게시물만 수집"""
         try:
             # media_type 확인 (1=Image, 2=Video, 8=Carousel)
             media_type = getattr(media, 'media_type', 0)
             
             # 단일 영상 게시물은 제외
             if media_type == 2:
-                logger.info(f"🎬 영상 게시물 → 건너뛰기")
+                logger.info(f"🎬 영상 게시물 감지 → 건너뛰기")
                 return None
             
             image_urls = []
-            
+        
             # 1. Carousel (다중 이미지/비디오)
             if hasattr(media, 'resources') and media.resources:
                 logger.info(f"📸 Carousel 게시물 감지 (리소스 {len(media.resources)}개)")
@@ -355,7 +414,7 @@ class InstagramScraper:
                     if resource_type == 2:
                         logger.info(f"   [{idx+1}] 🎬 영상 리소스 → 건너뛰기")
                         continue
-                    
+                
                     # 고화질 이미지/썸네일 우선
                     if hasattr(resource, 'image_versions2') and resource.image_versions2:
                         candidates = resource.image_versions2.get('candidates', [])
