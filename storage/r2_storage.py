@@ -128,3 +128,49 @@ class R2StorageAdapter:
             '.gif': 'image/gif'
         }
         return content_types.get(ext, 'application/octet-stream')
+    
+
+    def _get_content_type(self, file_path: str) -> str:
+        """
+        파일 확장자로 Content-Type 결정
+        
+        Args:
+            file_path: 파일 경로
+            
+        Returns:
+            Content-Type
+        """
+        ext = os.path.splitext(file_path)[1].lower()
+        content_types = {
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.webp': 'image/webp',
+            '.gif': 'image/gif'
+        }
+        return content_types.get(ext, 'application/octet-stream')
+    
+    def generate_presigned_url(self, file_path: str, expires_in: int = 3600) -> str:
+        """
+        Presigned URL 생성 (임시 접근 URL)
+        
+        Args:
+            file_path: 파일 경로
+            expires_in: 유효 시간 (초, 기본 1시간)
+            
+        Returns:
+            Presigned URL
+        """
+        try:
+            url = self.client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': self.bucket_name,
+                    'Key': file_path
+                },
+                ExpiresIn=expires_in
+            )
+            return url
+        except Exception as e:
+            logger.error(f"Presigned URL 생성 실패: {e}")
+            raise
